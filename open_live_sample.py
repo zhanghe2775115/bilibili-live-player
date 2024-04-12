@@ -6,12 +6,12 @@ import blivedm.models.open_live as open_models
 import blivedm.models.web as web_models
 
 # 在开放平台申请的开发者密钥
-ACCESS_KEY_ID = ''
-ACCESS_KEY_SECRET = ''
+ACCESS_KEY_ID = 'f4Gi8FWbaAjCHDnnuTkIAyMg'
+ACCESS_KEY_SECRET = 'YhneBmdZQnlBoiAhIJKPaab7OIlH4t'
 # 在开放平台创建的项目ID
-APP_ID = 0
+APP_ID = 1715968777609
 # 主播身份码
-ROOM_OWNER_AUTH_CODE = ''
+ROOM_OWNER_AUTH_CODE = 'DIF3DSMNE51C1'
 
 
 async def main():
