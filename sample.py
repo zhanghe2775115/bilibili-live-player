@@ -11,7 +11,7 @@ import blivedm.models.web as web_models
 
 # 直播间ID的取值看直播间URL
 TEST_ROOM_IDS = [
-    3044248,
+    32456091,
 ]
 
 # 这里填一个已登录账号的cookie的SESSDATA字段的值。不填也可以连接，但是收到弹幕的用户名会打码，UID会变成0
@@ -89,11 +89,11 @@ class MyHandler(blivedm.BaseHandler):
     #           f" uname={command['data']['uname']}")
     # _CMD_CALLBACK_DICT['INTERACT_WORD'] = __interact_word_callback  # noqa
 
-    #def _on_heartbeat(self, client: blivedm.BLiveClient, message: web_models.HeartbeatMessage):
-        #print(f'[{client.room_id}] 心跳')
+    def _on_heartbeat(self, client: blivedm.BLiveClient, message: web_models.HeartbeatMessage):
+        print(f'[{client.room_id}] 心跳')
 
-    #def _on_danmaku(self, client: blivedm.BLiveClient, message: web_models.DanmakuMessage):
-        #print(f'[{client.room_id}] {message.uname}：{message.msg}')
+    def _on_danmaku(self, client: blivedm.BLiveClient, message: web_models.DanmakuMessage):
+        print(f'[{client.room_id}] {message.uname}：{message.msg}')
 
     def _on_gift(self, client: blivedm.BLiveClient, message: web_models.GiftMessage):
         print(f'[{client.room_id}] {message.uname} 赠送{message.gift_name}x{message.num}'
