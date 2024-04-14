@@ -4,6 +4,8 @@ import asyncio
 import aiohttp
 import http.cookies
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QSizePolicy
+
 from PyQt5.QtCore import QTimer, pyqtSignal, Qt, QPoint
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import QObject, pyqtSignal
@@ -14,10 +16,11 @@ from PyQt5.QtWidgets import QApplication, QWidget, QLabel
 from PyQt5.QtCore import QUrl, QTimer, Qt, pyqtSignal
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 from PyQt5.QtMultimediaWidgets import QVideoWidget  # 正确的导入位置
-
+from PyQt5.QtCore import QThread, pyqtSignal
 import blivedm
 import blivedm.models.open_live as open_models
 import blivedm.models.web as web_models
+import threading
 
 import asyncio
 import asyncio
@@ -25,9 +28,13 @@ import http.cookies
 import random
 from typing import *
 
+import pygame
+import pyttsx3
+
 # 弹幕处理器类
 class MyHandler(blivedm.BaseHandler, QObject):
     video_switch_signal = pyqtSignal(int)
+    danmu_text = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()  # 初始化QObject
@@ -37,7 +44,8 @@ class MyHandler(blivedm.BaseHandler, QObject):
 
     def _on_danmaku(self, client: blivedm.BLiveClient, message: web_models.DanmakuMessage):
         print(f'[{client.room_id}] {message.uname}：{message.msg}')
-        if message.msg == "黑短裤":
+        self.danmu_text.emit(message.msg)
+        if message.msg == "短裤":
             self.video_switch_signal.emit(0)
         elif message.msg == "吊带":
             self.video_switch_signal.emit(1)
@@ -60,15 +68,17 @@ class VideoPlayer(QWidget):
 
     def setup_ui(self):
         self.setWindowTitle('Automatic Live Room')
-        self.setGeometry(0, 0, 720, 1080)
-        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setGeometry(0, 0, 608, 1080)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
 
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
 
         self.video_label = QLabel(self)
-        self.video_label.setGeometry(0, 0, 720, 1080)
+        self.video_label.setGeometry(0, 0, 608, 1080)
         self.layout.addWidget(self.video_label)
+        self.video_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.video_label.setScaledContents(True)
 
         self.timer = QTimer(self)
 
@@ -78,20 +88,36 @@ class VideoPlayer(QWidget):
         self.icon_label.setGeometry(0, 100, 100, 100)
 
         # 滚动字幕
-        self.subtitle_label = QLabel('输入弹幕，播放对应视频!', self)
-        self.subtitle_label.setStyleSheet("color: white; background: transparent;")
-        self.subtitle_label.setGeometry(1920, 50, 1000, 50)
+        self.subtitle_label = QLabel('输入弹幕，短裤/吊带/裙子，播放对应视频!', self)
+        self.subtitle_label.setStyleSheet("color: red; background: transparent;")
+        self.subtitle_label.setGeometry(300, 50, 300, 50)
         self.subtitle_speed = 4
+
+        # 初始化pygame和背  景音乐
+        pygame.mixer.init()
+        self.background_music = pygame.mixer.music.load('bgm.mp3')
+        pygame.mixer.music.set_volume(0.5)  # 初始音量
+        pygame.mixer.music.play(-1)  # 循环播放
+        #pygame.mixer.music.play()
+
+        # 初始化pyttsx3
+        self.engine = pyttsx3.init()
+        self.engine.setProperty('rate', 150)  # 语速
 
     def play_video(self):
         video_path = self.videos[self.current_video_index]
         self.cap = cv2.VideoCapture(video_path)
         fps = self.cap.get(cv2.CAP_PROP_FPS)
         print(f'frame[{fps}]')
+    # 断开旧的连接，以防止多次触发
+        try:
+            self.timer.timeout.disconnect()
+        except TypeError:
+            # 如果之前没有连接，disconnect() 会抛出 TypeError
+            pass
         self.timer.setInterval(1000 / fps)
         self.timer.timeout.connect(self.next_frame)
         self.timer.start()
-        print(f'next_frame[]')
 
     def next_frame(self):
 
@@ -102,7 +128,7 @@ class VideoPlayer(QWidget):
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         image = QImage(frame.data, frame.shape[1], frame.shape[0], QImage.Format_RGB888)
         pixmap = QPixmap.fromImage(image)
-        self.video_label.setPixmap(pixmap.scaled(720, 1080, Qt.KeepAspectRatio))
+        self.video_label.setPixmap(pixmap.scaled(608, 1080, Qt.KeepAspectRatio))
         self.update_subtitle()
         self.update_icon_position()
 
@@ -113,11 +139,26 @@ class VideoPlayer(QWidget):
             self.timer.stop()
             self.play_video()
 
+    def play_speech(self, text):
+        # 调小背景音乐音量
+        pygame.mixer.music.set_volume(0.1)
+        
+        # 生成并播放语音
+        self.engine.say(text)
+        self.engine.runAndWait()
+        
+        # 恢复背景音乐音量
+        pygame.mixer.music.set_volume(0.5)
+
+    def closeEvent(self, event):
+        self.cap.release()
+        pygame.mixer.music.stop()
+        pygame.quit()
 
     def update_subtitle(self):
         new_x = self.subtitle_label.x() - self.subtitle_speed
         if new_x < -self.subtitle_label.width():
-            new_x = 720
+            new_x = 608
         self.subtitle_label.move(new_x, self.subtitle_label.y())
 
     def update_icon_position(self):
@@ -125,6 +166,48 @@ class VideoPlayer(QWidget):
         if new_x > 1920:
             new_x = 0
         self.icon_label.move(new_x, self.icon_label.y())
+
+class BLiveClientThread(QThread):
+    # 定义信号，例如切换视频、播放语音等
+    video_switch_signal = pyqtSignal(int)
+    danmu_text_signal = pyqtSignal(str)
+
+    def __init__(self, room_id, cookies, videoplayer):
+        super().__init__()
+        self.room_id = room_id
+        self.cookies = cookies
+        self.videoplayer = videoplayer;
+
+    def run(self):
+        # 为线程设置 asyncio 事件循环
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self.start_client())
+        finally:
+            loop.close()  # 确保清理资源
+
+    async def start_client(self):
+        async with aiohttp.ClientSession(cookies=self.cookies) as session:
+            client = blivedm.BLiveClient(self.room_id, session=session)
+            handler = MyHandler()
+            client.set_handler(handler)
+
+            # 连接信号
+            #handler.video_switch_signal.connect(self.videoplayer.video_switch_signal.emit)
+            #handler.danmu_text_signal.connect(self.videoplayer.danmu_text_signal.emit)
+            handler.video_switch_signal.connect(self.videoplayer.change_video)
+            handler.danmu_text.connect(self.videoplayer.play_speech)
+            client.start()
+            try:
+                # 演示5秒后停止
+                await client.join()
+            finally:
+                await client.stop_and_close()
+
+    def stop_client(self):
+        # 在这里添加停止客户端的逻辑
+        pass
 
 # 异步主函数
 async def main():
@@ -143,23 +226,28 @@ async def main():
     # 准备cookie字典以传递给ClientSession
     cookie_dict = {key: morsel.value for key, morsel in cookies.items()}
 
+    player.client_thread = BLiveClientThread(32456091, {'SESSDATA': ''}, player)
+    player.client_thread.start()
+    sys.exit(app.exec_())
     # 使用异步上下文管理器启动会话
-    async with aiohttp.ClientSession(cookies=cookie_dict) as session:
-        TEST_ROOM_IDS = [
-            32456091,
-        ]
-        room_id = random.choice(TEST_ROOM_IDS)
-        client = blivedm.BLiveClient(room_id, session=session)
-        handler = MyHandler()
-        client.set_handler(handler)
-        handler.video_switch_signal.connect(player.change_video)
-        client.start()
-        try:
-            # 演示5秒后停止
-            sys.exit(app.exec_())
-            await client.join()
-        finally:
-            await client.stop_and_close()
+    # async with aiohttp.ClientSession(cookies=cookie_dict) as session:
+    #     TEST_ROOM_IDS = [
+    #         32456091,
+    #     ]
+    #     room_id = random.choice(TEST_ROOM_IDS)
+    #     client = blivedm.BLiveClient(room_id, session=session)
+    #     handler = MyHandler()
+    #     client.set_handler(handler)
+    #     handler.video_switch_signal.connect(player.change_video)
+    #     handler.danmu_text.connect(player.play_speech)
+    #     client.start()
+    #     try:
+    #         # 演示5秒后停止
+    #         sys.exit(app.exec_())
+    #         await client.join()
+    #     finally:
+    #         await client.stop_and_close()
+
 
 # 运行程序
 if __name__ == '__main__':
