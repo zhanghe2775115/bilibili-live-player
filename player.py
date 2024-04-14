@@ -56,44 +56,75 @@ class VideoPlayer(QWidget):
         self.videos = videos
         self.current_video_index = 0
         self.setup_ui()
+        self.play_video()
 
     def setup_ui(self):
         self.setWindowTitle('Automatic Live Room')
-        self.setGeometry(0, 0, 720, 1280)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setGeometry(0, 0, 720, 1080)
+        self.setWindowFlags(Qt.FramelessWindowHint)
 
-        self.videoWidget = QVideoWidget(self)
-        self.videoWidget.setGeometry(0, 0, 720, 1280)
-        self.player = QMediaPlayer(None, QMediaPlayer.VideoSurface)
-        self.player.setVideoOutput(self.videoWidget)
-        self.player.setMedia(QMediaContent(QUrl.fromLocalFile(self.videos[0])))
-        self.player.mediaStatusChanged.connect(self.check_media_status)  # 监听状态改变
-        self.player.play()
+        self.layout = QVBoxLayout()
+        self.setLayout(self.layout)
+
+        self.video_label = QLabel(self)
+        self.video_label.setGeometry(0, 0, 720, 1080)
+        self.layout.addWidget(self.video_label)
+
+        self.timer = QTimer(self)
+
+        # 图标移动
+        self.icon_label = QLabel(self)
+        self.icon_label.setPixmap(QPixmap('icon.jpg'))
+        self.icon_label.setGeometry(0, 100, 100, 100)
 
         # 滚动字幕
-        # self.subtitleLabel = QLabel('输入弹幕，播放对应视频!', self)
-        # self.subtitleLabel.setStyleSheet("color: white; background: transparent;")
-        # self.subtitleLabel.setGeometry(0, 450, 720, 30)  # 调整字幕显示位置
-        # self.subtitle_speed = 4
-        # self.subtitle_timer = QTimer(self)
-        # self.subtitle_timer.timeout.connect(self.scroll_subtitle)
-        # self.subtitle_timer.start(50)
+        self.subtitle_label = QLabel('输入弹幕，播放对应视频!', self)
+        self.subtitle_label.setStyleSheet("color: white; background: transparent;")
+        self.subtitle_label.setGeometry(1920, 50, 1000, 50)
+        self.subtitle_speed = 4
 
-    def check_media_status(self, status):
-        print(f'check{status}')
-        if status == QMediaPlayer.EndOfMedia:
-            self.player.setPosition(0)  # 重新播放视频
-            self.player.play()
+    def play_video(self):
+        video_path = self.videos[self.current_video_index]
+        self.cap = cv2.VideoCapture(video_path)
+        fps = self.cap.get(cv2.CAP_PROP_FPS)
+        print(f'frame[{fps}]')
+        self.timer.setInterval(1000 / fps)
+        self.timer.timeout.connect(self.next_frame)
+        self.timer.start()
+        print(f'next_frame[]')
+
+    def next_frame(self):
+
+        ret, frame = self.cap.read()
+        if not ret:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            return
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        image = QImage(frame.data, frame.shape[1], frame.shape[0], QImage.Format_RGB888)
+        pixmap = QPixmap.fromImage(image)
+        self.video_label.setPixmap(pixmap.scaled(720, 1080, Qt.KeepAspectRatio))
+        self.update_subtitle()
+        self.update_icon_position()
+
     def change_video(self, video_index):
-        if 0 <= video_index < len(self.videos):
-            self.player.setMedia(QMediaContent(QUrl.fromLocalFile(self.videos[video_index])))
-            self.player.play()
+        if video_index != self.current_video_index:
+            self.current_video_index = video_index
+            self.cap.release()
+            self.timer.stop()
+            self.play_video()
 
-    def scroll_subtitle(self):
-        new_y = self.subtitleLabel.y() - self.subtitle_speed
-        if new_y < -30:  # 根据字幕高度调整
-            new_y = 480  # 视频窗口高度
-        self.subtitleLabel.move(0, new_y)  # 保持字幕水平居中
+
+    def update_subtitle(self):
+        new_x = self.subtitle_label.x() - self.subtitle_speed
+        if new_x < -self.subtitle_label.width():
+            new_x = 720
+        self.subtitle_label.move(new_x, self.subtitle_label.y())
+
+    def update_icon_position(self):
+        new_x = self.icon_label.x() + 5
+        if new_x > 1920:
+            new_x = 0
+        self.icon_label.move(new_x, self.icon_label.y())
 
 # 异步主函数
 async def main():
@@ -125,6 +156,7 @@ async def main():
         client.start()
         try:
             # 演示5秒后停止
+            sys.exit(app.exec_())
             await client.join()
         finally:
             await client.stop_and_close()

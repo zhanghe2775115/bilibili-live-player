@@ -1,0 +1,104 @@
+import sys
+import cv2
+import asyncio
+import aiohttp
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel
+from PyQt5.QtCore import QTimer, pyqtSignal, Qt, QPoint
+from PyQt5.QtGui import QImage, QPixmap
+
+import blivedm
+import blivedm.models.web as web_models
+
+# 弹幕处理器类
+class MyHandler(blivedm.BaseHandler):
+    video_switch_signal = pyqtSignal(int)
+
+    def _on_danmaku(self, client: blivedm.BLiveClient, message: web_models.DanmakuMessage):
+        print(f'[{client.room_id}] {message.uname}：{message.msg}')
+        if message.msg == "播放视频1":
+            self.video_switch_signal.emit(0)
+        elif message.msg == "播放视频2":
+            self.video_switch_signal.emit(1)
+
+    def _on_gift(self, client: blivedm.BLiveClient, message: web_models.GiftMessage):
+        print(f'[{client.room_id}] {message.uname} 赠送{message.gift_name}x{message.num}')
+        if message.gift_name == "小电视" and message.num >= 1:
+            self.video_switch_signal.emit(1)
+
+# 视频播放器类
+class VideoPlayer(QWidget):
+    def __init__(self, videos):
+        super().__init__()
+        self.videos = videos
+        self.current_video_index = 0
+        self.setup_ui()
+        self.play_video()
+
+    def setup_ui(self):
+        self.setWindowTitle('Automatic Live Room')
+        self.setGeometry(0, 0, 1920, 1080)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+
+        self.layout = QVBoxLayout()
+        self.setLayout(self.layout)
+
+        self.video_label = QLabel(self)
+        self.video_label.setGeometry(0, 0, 1920, 1080)
+        self.layout.addWidget(self.video_label)
+
+        self.timer = QTimer(self)
+
+        # 图标移动
+        self.icon_label = QLabel(self)
+        self.icon_label.setPixmap(QPixmap('path/to/icon.png'))
+        self.icon_label.setGeometry(0, 100, 100, 100)
+
+        # 滚动字幕
+        self.subtitle_label = QLabel('输入弹幕，播放对应视频!', self)
+        self.subtitle_label.setStyleSheet("color: white; background: transparent;")
+        self.subtitle_label.setGeometry(1920, 50, 1000, 50)
+        self.subtitle_speed = 4
+
+    def play_video(self):
+        video_path = self.videos[self.current_video_index]
+        self.cap = cv2.VideoCapture(video_path)
+        fps = self.cap.get(cv2.CAP_PROP_FPS)
+        self.timer.setInterval(1000 / fps)
+        self.timer.timeout.connect(self.next_frame)
+        self.timer.start()
+
+    def next_frame(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            return
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        image = QImage(frame.data, frame.shape[1], frame.shape[0], QImage.Format_RGB888)
+        pixmap = QPixmap.fromImage(image)
+        self.video_label.setPixmap(pixmap.scaled(1920, 1080, Qt.KeepAspectRatio))
+        self.update_subtitle()
+        self.update_icon_position()
+
+    def switch_video(self, video_index):
+        if video_index != self.current_video_index:
+            self.current_video_index = video_index
+            self.cap.release()
+            self.timer.stop()
+            self.play_video()
+
+    def update_subtitle(self):
+        new_x = self.subtitle_label.x() - self.subtitle_speed
+        if new_x < -self.subtitle_label.width():
+            new_x = 1920
+        self.subtitle_label.move(new_x, self.subtitle_label.y())
+
+    def update_icon_position(self):
+        new_x = self.icon_label.x() + 5
+        if new_x > 1920:
+            new_x = 0
+        self.icon_label.move(new_x, self.icon_label.y())
+
+# 异步主函数
+async def main():
+    app = QApplication(sys.argv)
+    player = VideoPlayer(['path/to/video1.mp4', 'path/to/video2.mp4'])
