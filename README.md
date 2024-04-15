@@ -1,3 +1,7 @@
+#bibli-live-player
+获取bilibili直播间消息，基于blivedm开发
+
+
 # blivedm
 
 Python获取bilibili直播弹幕的库，使用WebSocket协议，支持web端和B站直播开放平台两种接口
