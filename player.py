@@ -17,7 +17,7 @@ from blivedm.models.web import *
 
 # 弹幕处理器类
 class MyHandler(blivedm.BaseHandler, QObject):
-    video_switch_signal = pyqtSignal(int)
+    video_switch_signal = pyqtSignal(str)
     danmu_text = pyqtSignal(str)
 
     def __init__(self):
@@ -29,12 +29,13 @@ class MyHandler(blivedm.BaseHandler, QObject):
     def _on_danmaku(self, client: blivedm.BLiveClient, message: web_models.DanmakuMessage):
         print(f'[{client.room_id}] {message.uname}：{message.msg}')
         self.danmu_text.emit(message.msg)
-        if message.msg == "短裤":
-            self.video_switch_signal.emit(0)
-        elif message.msg == "吊带":
-            self.video_switch_signal.emit(1)
-        elif message.msg == "裙子":
-            self.video_switch_signal.emit(2)
+        #if message.msg == "短裤":
+        #    self.video_switch_signal.emit(0)
+        #elif message.msg == "吊带":
+        #    self.video_switch_signal.emit(1)
+        #elif message.msg == "裙子":
+        #    self.video_switch_signal.emit(2)
+	self.video_switch_signal.emit(msg)
 
     def _on_gift(self, client: blivedm.BLiveClient, message: web_models.GiftMessage):
         print(f'[{client.room_id}] {message.uname} 赠送{message.gift_name}x{message.num}')
@@ -44,11 +45,20 @@ class MyHandler(blivedm.BaseHandler, QObject):
 class VideoPlayer(QWidget):
     
     def __init__(self, videos):
-        super().__init__()
-        self.videos = videos
-        self.current_video_index = 0
+	    super().__init__()
+	    self.videos = videos
+	    self.current_video_index = 0
+	    video_data = load_video_data('videos.csv')
+	    self.video_data = {item['keyword']: item for item in video_data}
+	    self.current_video_path = self.video_data[next(iter(self.video_data))]['path']
+
         self.setup_ui()
         self.play_video()
+
+    def load_video_data(filepath):
+        with open(filepath, newline='', encoding='utf-8') as csvfile:
+	    reader = csv.DictReader(csvfile)
+	    return list(reader)
 
     def setup_ui(self):
         self.setWindowTitle('Automatic Live Room')
@@ -71,13 +81,17 @@ class VideoPlayer(QWidget):
         self.icon_label.setPixmap(QPixmap('icon.jpg'))
         self.icon_label.setGeometry(0, 100, 100, 100)
 
-        # 滚动字幕
-        self.subtitle_label = QLabel('输入弹幕，短裤/吊带/裙子，播放对应视频!', self)
+        # 提取所有关键词并创建一个字符串
+        keywords = '/'.join(self.video_data.keys())
+        subtitle_text = f'输入弹幕，{keywords}，播放对应视频!'
+    
+        # 设置字幕标签
+        self.subtitle_label = QLabel(subtitle_text, self)
         self.subtitle_label.setStyleSheet("color: red; background: transparent;")
         self.subtitle_label.setGeometry(300, 50, 300, 50)
         self.subtitle_speed = 4
 
-        # 初始化pygame和背  景音乐
+        # 初始化pygame和背景音乐
         pygame.mixer.init()
         self.background_music = pygame.mixer.music.load('bgm.mp3')
         pygame.mixer.music.set_volume(0.5)  # 初始音量
@@ -89,8 +103,7 @@ class VideoPlayer(QWidget):
         self.engine.setProperty('rate', 150)  # 语速
 
     def play_video(self):
-        video_path = self.videos[self.current_video_index]
-        self.cap = cv2.VideoCapture(video_path)
+        self.cap = cv2.VideoCapture(self.current_video_path)
         fps = self.cap.get(cv2.CAP_PROP_FPS)
         print(f'frame[{fps}]')
     # 断开旧的连接，以防止多次触发
@@ -116,12 +129,16 @@ class VideoPlayer(QWidget):
         self.update_subtitle()
         self.update_icon_position()
 
-    def change_video(self, video_index):
-        if video_index != self.current_video_index:
-            self.current_video_index = video_index
-            self.cap.release()
-            self.timer.stop()
-            self.play_video()
+    def change_video(self, msg):
+        video_info = self.video_data.get(msg)
+        if video_info:
+	        if video_info != self.current_video_index:
+	            self.current_video_path = video_info['path']
+	            self.cap.release()
+	            self.timer.stop()
+	            self.play_video()
+        else:
+            print("No video found for keyword:", msg)
 
     def play_speech(self, text):
         # 调小背景音乐音量
