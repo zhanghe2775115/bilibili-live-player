@@ -6,6 +6,7 @@ import asyncio
 import aiohttp
 import pygame
 import pyttsx3
+import csv
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QSizePolicy
 from PyQt5.QtCore import QTimer, pyqtSignal, Qt, QPoint, QObject, QThread, QUrl
 from PyQt5.QtGui import QImage, QPixmap
@@ -14,6 +15,7 @@ from PyQt5.QtMultimediaWidgets import QVideoWidget
 import blivedm
 from blivedm.models.open_live import *
 from blivedm.models.web import *
+import blivedm.models.web as web_models
 
 # 弹幕处理器类
 class MyHandler(blivedm.BaseHandler, QObject):
@@ -35,7 +37,7 @@ class MyHandler(blivedm.BaseHandler, QObject):
         #    self.video_switch_signal.emit(1)
         #elif message.msg == "裙子":
         #    self.video_switch_signal.emit(2)
-	self.video_switch_signal.emit(msg)
+        self.video_switch_signal.emit(message.msg)
 
     def _on_gift(self, client: blivedm.BLiveClient, message: web_models.GiftMessage):
         print(f'[{client.room_id}] {message.uname} 赠送{message.gift_name}x{message.num}')
@@ -45,20 +47,19 @@ class MyHandler(blivedm.BaseHandler, QObject):
 class VideoPlayer(QWidget):
 
     def __init__(self, videos):
-	super().__init__()
-	self.videos = videos
-	self.current_video_index = 0
-	video_data = load_video_data('videos.csv')
-	self.video_data = {item['keyword']: item for item in video_data}
-	self.current_video_path = self.video_data[next(iter(self.video_data))]['path']
-
+        super().__init__()
+        self.videos = videos
+        self.current_video_index = 0
+        video_data = self.load_video_data('videos.csv')
+        self.video_data = {item['keyword']: item for item in video_data}
+        self.current_video_path = self.video_data[next(iter(self.video_data))]['path']
         self.setup_ui()
         self.play_video()
 
-    def load_video_data(filepath):
+    def load_video_data(self, filepath):
         with open(filepath, newline='', encoding='utf-8') as csvfile:
-	    reader = csv.DictReader(csvfile)
-	    return list(reader)
+            reader = csv.DictReader(csvfile)
+            return list(reader)
 
     def setup_ui(self):
         self.setWindowTitle('Automatic Live Room')
@@ -132,11 +133,17 @@ class VideoPlayer(QWidget):
     def change_video(self, msg):
         video_info = self.video_data.get(msg)
         if video_info:
-	        if video_info != self.current_video_index:
-	            self.current_video_path = video_info['path']
-	            self.cap.release()
-	            self.timer.stop()
-	            self.play_video()
+            video_path = video_info.get('path')
+            if video_path and video_path != self.current_video_path:
+                self.current_video_path = video_path
+                try:
+                    self.cap.release()
+                    self.timer.stop()
+                    self.play_video()
+                except Exception as e:
+                    print(f"Error when trying to change video: {e}")
+            else:
+                print("Skip unchanged video path or undefined path")
         else:
             print("No video found for keyword:", msg)
 
