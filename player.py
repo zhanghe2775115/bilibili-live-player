@@ -43,14 +43,14 @@ class MyHandler(blivedm.BaseHandler, QObject):
             self.video_switch_signal.emit(1)
 
 class VideoPlayer(QWidget):
-    
+
     def __init__(self, videos):
-	    super().__init__()
-	    self.videos = videos
-	    self.current_video_index = 0
-	    video_data = load_video_data('videos.csv')
-	    self.video_data = {item['keyword']: item for item in video_data}
-	    self.current_video_path = self.video_data[next(iter(self.video_data))]['path']
+	super().__init__()
+	self.videos = videos
+	self.current_video_index = 0
+	video_data = load_video_data('videos.csv')
+	self.video_data = {item['keyword']: item for item in video_data}
+	self.current_video_path = self.video_data[next(iter(self.video_data))]['path']
 
         self.setup_ui()
         self.play_video()
@@ -106,7 +106,7 @@ class VideoPlayer(QWidget):
         self.cap = cv2.VideoCapture(self.current_video_path)
         fps = self.cap.get(cv2.CAP_PROP_FPS)
         print(f'frame[{fps}]')
-    # 断开旧的连接，以防止多次触发
+    	# 断开旧的连接，以防止多次触发
         try:
             self.timer.timeout.disconnect()
         except TypeError:
