@@ -1,35 +1,19 @@
 import sys
+import random
+import http.cookies
 import cv2
 import asyncio
 import aiohttp
-import http.cookies
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QSizePolicy
-
-from PyQt5.QtCore import QTimer, pyqtSignal, Qt, QPoint
-from PyQt5.QtGui import QImage, QPixmap
-from PyQt5.QtCore import QObject, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel
-from PyQt5.QtCore import QTimer, pyqtSignal, Qt, QPoint, QUrl
-from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
-from PyQt5.QtWidgets import QApplication, QWidget, QLabel
-from PyQt5.QtCore import QUrl, QTimer, Qt, pyqtSignal
-from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
-from PyQt5.QtMultimediaWidgets import QVideoWidget  # 正确的导入位置
-from PyQt5.QtCore import QThread, pyqtSignal
-import blivedm
-import blivedm.models.open_live as open_models
-import blivedm.models.web as web_models
-import threading
-
-import asyncio
-import asyncio
-import http.cookies
-import random
-from typing import *
-
 import pygame
 import pyttsx3
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QSizePolicy
+from PyQt5.QtCore import QTimer, pyqtSignal, Qt, QPoint, QObject, QThread, QUrl
+from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
+from PyQt5.QtMultimediaWidgets import QVideoWidget
+import blivedm
+from blivedm.models.open_live import *
+from blivedm.models.web import *
 
 # 弹幕处理器类
 class MyHandler(blivedm.BaseHandler, QObject):
