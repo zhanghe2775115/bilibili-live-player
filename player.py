@@ -41,8 +41,8 @@ class MyHandler(blivedm.BaseHandler, QObject):
 
     def _on_gift(self, client: blivedm.BLiveClient, message: web_models.GiftMessage):
         print(f'[{client.room_id}] {message.uname} 赠送{message.gift_name}x{message.num}')
-        if message.gift_name == "小电视" and message.num >= 1:
-            self.video_switch_signal.emit(1)
+        #if message.gift_name == "小电视" and message.num >= 1:
+        self.video_switch_signal.emit(message.msg)
 
 class VideoPlayer(QWidget):
 
@@ -78,9 +78,9 @@ class VideoPlayer(QWidget):
         self.timer = QTimer(self)
 
         # 图标移动
-        self.icon_label = QLabel(self)
-        self.icon_label.setPixmap(QPixmap('icon.jpg'))
-        self.icon_label.setGeometry(0, 100, 100, 100)
+        #self.icon_label = QLabel(self)
+        #self.icon_label.setPixmap(QPixmap('icon.jpg'))
+        #self.icon_label.setGeometry(0, 100, 100, 100)
 
         # 提取所有关键词并创建一个字符串
         keywords = '/'.join(self.video_data.keys())
@@ -88,8 +88,8 @@ class VideoPlayer(QWidget):
     
         # 设置字幕标签
         self.subtitle_label = QLabel(subtitle_text, self)
-        self.subtitle_label.setStyleSheet("color: red; background: transparent;")
-        self.subtitle_label.setGeometry(300, 50, 300, 50)
+        self.subtitle_label.setStyleSheet("color: red; background: transparent;font-size: 25px;")
+        self.subtitle_label.setGeometry(400, 50, 800, 200)
         self.subtitle_speed = 4
 
         # 初始化pygame和背景音乐
@@ -128,7 +128,7 @@ class VideoPlayer(QWidget):
         pixmap = QPixmap.fromImage(image)
         self.video_label.setPixmap(pixmap.scaled(608, 1080, Qt.KeepAspectRatio))
         self.update_subtitle()
-        self.update_icon_position()
+        #self.update_icon_position()
 
     def change_video(self, msg):
         video_info = self.video_data.get(msg)
