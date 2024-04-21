@@ -1,17 +1,14 @@
 import sys
-import random
 import http.cookies
-import cv2
 import asyncio
 import aiohttp
-import pygame
 import pyttsx3
 import csv
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QSizePolicy
-from PyQt5.QtCore import QTimer, pyqtSignal, Qt, QPoint, QObject, QThread, QUrl
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QSizePolicy, QGraphicsView, QGraphicsScene
+from PyQt5.QtCore import QTimer, pyqtSignal, Qt, QPoint, QObject, QThread, QUrl, QSizeF
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
-from PyQt5.QtMultimediaWidgets import QVideoWidget
+from PyQt5.QtMultimediaWidgets import QGraphicsVideoItem
 import blivedm
 from blivedm.models.open_live import *
 from blivedm.models.web import *
@@ -54,7 +51,7 @@ class VideoPlayer(QWidget):
         self.video_data = {item['keyword']: item for item in video_data}
         self.current_video_path = self.video_data[next(iter(self.video_data))]['path']
         self.setup_ui()
-        self.play_video()
+        self.setup_player()
 
     def load_video_data(self, filepath):
         with open(filepath, newline='', encoding='utf-8') as csvfile:
@@ -69,11 +66,14 @@ class VideoPlayer(QWidget):
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
 
-        self.video_label = QLabel(self)
-        self.video_label.setGeometry(0, 0, 608, 1080)
-        self.layout.addWidget(self.video_label)
-        self.video_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.video_label.setScaledContents(True)
+        # 设置 QGraphicsView 和 QGraphicsScene
+        self.scene = QGraphicsScene(self)
+        self.view = QGraphicsView(self.scene, self)
+        self.view.setGeometry(0, 0, 608, 1080)  # 视图的大小设为608x1080
+        self.video_item = QGraphicsVideoItem()  # 创建视频播放项
+        self.scene.addItem(self.video_item)  # 将视频播放项添加到场景中
+        self.video_item.setSize(QSizeF(608, 1080))  # 设置视频项的尺寸为608x1080
+        self.layout.addWidget(self.view)
 
         self.timer = QTimer(self)
 
@@ -89,46 +89,37 @@ class VideoPlayer(QWidget):
         # 设置字幕标签
         self.subtitle_label = QLabel(subtitle_text, self)
         self.subtitle_label.setStyleSheet("color: red; background: transparent;font-size: 25px;")
-        self.subtitle_label.setGeometry(400, 50, 800, 200)
-        self.subtitle_speed = 4
+        self.subtitle_label.setGeometry(50, 50, 800, 200)
+        self.subtitle_speed = 2
 
-        # 初始化pygame和背景音乐
-        pygame.mixer.init()
-        self.background_music = pygame.mixer.music.load('bgm.mp3')
-        pygame.mixer.music.set_volume(0.5)  # 初始音量
-        pygame.mixer.music.play(-1)  # 循环播放
-        #pygame.mixer.music.play()
-
+        # Set up the timer for the scrolling icon
+        self.icon_timer = QTimer(self)
+        self.icon_timer.timeout.connect(self.update_subtitle)
+        self.icon_timer.start(15)
         # 初始化pyttsx3
         self.engine = pyttsx3.init()
         self.engine.setProperty('rate', 150)  # 语速
 
+    def setup_player(self):
+        # 设置媒体播放器和视频输出
+        self.media_player = QMediaPlayer(None, QMediaPlayer.VideoSurface)
+        self.media_player.setVideoOutput(self.video_item)
+        
+        # 连接视频播放结束的信号
+        self.media_player.mediaStatusChanged.connect(self.video_status_changed)
+        
+        self.play_video()
+
     def play_video(self):
-        self.cap = cv2.VideoCapture(self.current_video_path)
-        fps = self.cap.get(cv2.CAP_PROP_FPS)
-        print(f'frame[{fps}]')
-    	# 断开旧的连接，以防止多次触发
-        try:
-            self.timer.timeout.disconnect()
-        except TypeError:
-            # 如果之前没有连接，disconnect() 会抛出 TypeError
-            pass
-        self.timer.setInterval(1000 / fps)
-        self.timer.timeout.connect(self.next_frame)
-        self.timer.start()
+        # 播放视频
+        self.media_player.setMedia(QMediaContent(QUrl.fromLocalFile(self.current_video_path)))
+        self.media_player.play()
 
-    def next_frame(self):
-
-        ret, frame = self.cap.read()
-        if not ret:
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            return
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        image = QImage(frame.data, frame.shape[1], frame.shape[0], QImage.Format_RGB888)
-        pixmap = QPixmap.fromImage(image)
-        self.video_label.setPixmap(pixmap.scaled(608, 1080, Qt.KeepAspectRatio))
-        self.update_subtitle()
-        #self.update_icon_position()
+    def video_status_changed(self, status):
+        # 检测视频播放状态
+        if status == QMediaPlayer.EndOfMedia:
+            # 视频播放完毕，重新播放或者根据回调切换视频
+            self.media_player.play()  # 循环播放当前视频
 
     def change_video(self, msg):
         video_info = self.video_data.get(msg)
@@ -137,8 +128,7 @@ class VideoPlayer(QWidget):
             if video_path and video_path != self.current_video_path:
                 self.current_video_path = video_path
                 try:
-                    self.cap.release()
-                    self.timer.stop()
+                    self.media_player.stop()
                     self.play_video()
                 except Exception as e:
                     print(f"Error when trying to change video: {e}")
@@ -147,27 +137,16 @@ class VideoPlayer(QWidget):
         else:
             print("No video found for keyword:", msg)
 
-    def play_speech(self, text):
-        # 调小背景音乐音量
-        pygame.mixer.music.set_volume(0.1)
-        
+    def play_speech(self, text):     
         # 生成并播放语音
         self.engine.say(text)
         self.engine.runAndWait()
-        
-        # 恢复背景音乐音量
-        pygame.mixer.music.set_volume(0.5)
-
-    def closeEvent(self, event):
-        self.cap.release()
-        pygame.mixer.music.stop()
-        pygame.quit()
 
     def update_subtitle(self):
-        new_x = self.subtitle_label.x() - self.subtitle_speed
-        if new_x < -self.subtitle_label.width():
-            new_x = 608
-        self.subtitle_label.move(new_x, self.subtitle_label.y())
+        new_y = self.subtitle_label.y() - self.subtitle_speed
+        if new_y < -self.subtitle_label.height():
+            new_y = 1080
+        self.subtitle_label.move(self.subtitle_label.x(), new_y)
 
     def update_icon_position(self):
         new_x = self.icon_label.x() + 5
@@ -237,6 +216,25 @@ async def main():
     player.client_thread = BLiveClientThread(32456091, {'SESSDATA': ''}, player)
     player.client_thread.start()
     sys.exit(app.exec_())
+    # 使用异步上下文管理器启动会话
+    # async with aiohttp.ClientSession(cookies=cookie_dict) as session:
+    #     TEST_ROOM_IDS = [
+    #         32456091,
+    #     ]
+    #     room_id = random.choice(TEST_ROOM_IDS)
+    #     client = blivedm.BLiveClient(room_id, session=session)
+    #     handler = MyHandler()
+    #     client.set_handler(handler)
+    #     handler.video_switch_signal.connect(player.change_video)
+    #     handler.danmu_text.connect(player.play_speech)
+    #     client.start()
+    #     try:
+    #         # 演示5秒后停止
+    #         sys.exit(app.exec_())
+    #         await client.join()
+    #     finally:
+    #         await client.stop_and_close()
+
 
 # 运行程序
 if __name__ == '__main__':
